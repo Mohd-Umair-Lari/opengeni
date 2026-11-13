@@ -116,6 +116,12 @@ async function fetchXzText(url: string): Promise<string> {
   return unpacked.stdout.toString();
 }
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`GET ${url} failed with HTTP ${response.status}`);
+  return await response.json();
+}
+
 /** Newest google-chrome-stable .deb, with its SHA-256 verified against the downloaded bytes. */
 export async function resolveChromePin(): Promise<ChromePin> {
   const index = parsePackages(
@@ -158,14 +164,15 @@ export async function resolveChromiumPin(): Promise<ChromiumPin> {
 
   const seen: string[] = [];
   for (const pkg of CHROMIUM_PACKAGES) {
-    const info = (await (
-      await fetch(
-        `${SNAPSHOT}/mr/package/chromium/${encodeURIComponent(version)}/binfiles/${pkg}/${encodeURIComponent(version)}?fileinfo=1`,
-      )
-    ).json()) as {
+    const info = await fetchJson<{
       result?: Array<{ architecture: string; hash: string }>;
       fileinfo?: Record<string, Array<{ archive_name: string; first_seen: string }>>;
-    };
+    }>(
+      `${SNAPSHOT}/mr/package/chromium/${encodeURIComponent(version)}/binfiles/${pkg}/${encodeURIComponent(version)}?fileinfo=1`,
+      );
+
+    if (!Array.isArray(info.result)) throw new Error(`snapshot.debian.org returned an unexpected response for ${pkg} ${version}`);
+    
     for (const architecture of ARCHITECTURES) {
       const file = info.result?.find((entry) => entry.architecture === architecture);
       const firstSeen = (file ? (info.fileinfo?.[file.hash] ?? []) : [])
