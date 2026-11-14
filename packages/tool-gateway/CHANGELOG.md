@@ -1,5 +1,25 @@
 # @opengeni/tool-gateway
 
+## 6.22.0
+
+### Patch Changes
+
+- Updated dependencies [d50092b]
+- Updated dependencies [07ecbcc]
+  - @opengeni/contracts@6.22.0
+  - @opengeni/observability@6.22.0
+
+## 6.21.0
+
+### Patch Changes
+
+- Updated dependencies [7d0d52b]
+- Updated dependencies [ef4c334]
+- Updated dependencies [ce864c0]
+- Updated dependencies [6ac2cd4]
+  - @opengeni/contracts@6.21.0
+  - @opengeni/observability@6.21.0
+
 ## 6.20.1
 
 ### Patch Changes

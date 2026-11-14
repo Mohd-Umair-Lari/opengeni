@@ -786,14 +786,18 @@ spec:
           # (reason="destination_*") is the website's failure, not ours: it is
           # left out of both sides of the ratio, so an agent retrying a site
           # that is down neither pages nor dilutes our own failures.
+          # The same holds for the agent's own addressing mistakes: a locator
+          # that matched nothing or several elements (reason="locator_*") or an
+          # action the page cannot take (reason="invalid_action") means the
+          # browser answered correctly; the agent re-observes and retries.
           expr: |
             (
-              sum by (resource, operation) (increase(opengeni_interaction_operations_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},outcome=~"failed|denied|outcome_unknown",reason!~"destination_.+"}[15m]))
+              sum by (resource, operation) (increase(opengeni_interaction_operations_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},outcome=~"failed|denied|outcome_unknown",reason!~"destination_.+|locator_.+|invalid_action"}[15m]))
               /
-              clamp_min(sum by (resource, operation) (increase(opengeni_interaction_operations_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},reason!~"destination_.+"}[15m])), 1)
+              clamp_min(sum by (resource, operation) (increase(opengeni_interaction_operations_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},reason!~"destination_.+|locator_.+|invalid_action"}[15m])), 1)
             ) > 0.25
             and on (resource, operation)
-            sum by (resource, operation) (increase(opengeni_interaction_operations_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},outcome=~"failed|denied|outcome_unknown",reason!~"destination_.+"}[15m])) >= 5
+            sum by (resource, operation) (increase(opengeni_interaction_operations_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},outcome=~"failed|denied|outcome_unknown",reason!~"destination_.+|locator_.+|invalid_action"}[15m])) >= 5
           for: 10m
           labels:
             severity: warning
@@ -804,7 +808,7 @@ spec:
             value: '{{ "{{ $value | humanizePercentage }}" }} failed or refused (15 min)'
             user_impact: 'The agent (or a person) cannot drive the browser or computer: pages do not open, observations fail, or actions are refused, so tasks that need a browser stall.'
             next_step: 'Split opengeni_interaction_operations_total by reason in Grafana: permission_denied/access_denied is an authorization bug, control_* is a Connected Machine problem, timeout/controller_lost/driver_failed/tab_* point at the browser or its controller, stale is usually benign churn.'
-            description: 'Counts every Browser/Computer control route (including observe, tab, and attach routes) plus receipt outcomes; denied means a 401/403 refusal. Websites that did not answer or could not be reached (reason destination_*) are excluded; if every site fails that way at once, check the browser''s network.'
+            description: 'Counts every Browser/Computer control route (including observe, tab, and attach routes) plus receipt outcomes; denied means a 401/403 refusal. Websites that did not answer or could not be reached (reason destination_*) are excluded; if every site fails that way at once, check the browser''s network. The agent''s own addressing mistakes (reason locator_* or invalid_action) are excluded too.'
         - alert: OpenGeniHandoffsExpiringUnanswered
           expr: |
             (
@@ -1884,9 +1888,12 @@ spec:
             description: For 15m, at least 3 Codex-subscription calls and over 5% of those reporting usage in 30m have omitted cached-token fields, or active HTTP-success traffic has produced no call that reported usage. Calls without any usage count as status="no_usage", not missing. Cache-hit ratio remains unknown rather than being fabricated as zero; inspect provider usage payload compatibility, stream failures and worker usage persistence.
         # ── Connected Machines (op-outcome plane) ────────────────────────────
         - alert: OpenGeniMachineOpInfraFailuresHigh
+          # Only infrastructure faults count (infrastructure="true": offline,
+          # draining, stream, protocol, …). A missing path, a consent gate or a
+          # fence is the machine answering what the agent asked, not a fault.
           expr: |
             (
-              sum(increase(opengeni_machine_op_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},outcome="failed"}[10m]))
+              sum(increase(opengeni_machine_op_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }},outcome="failed",infrastructure="true"}[10m]))
               /
               clamp_min(sum(increase(opengeni_machine_op_total{namespace={{ .Release.Namespace | quote }},release={{ .Release.Name | quote }},environment={{ $environment | quote }}}[10m])), 1)
             ) > 0.1
@@ -1896,9 +1903,9 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: 'More than 10% of operations on Connected Machines failed over 10 minutes.'
+            summary: 'More than 10% of operations on Connected Machines failed for an infrastructure reason over 10 minutes. Missing files, consent refusals and similar answers to what the agent asked are not counted.'
             headline: 'Connected Machines: operations failing'
-            value: '{{ "{{ $value | humanizePercentage }}" }} of operations failed (10 min)'
+            value: '{{ "{{ $value | humanizePercentage }}" }} infra failures (10 min)'
             user_impact: 'Agents running on users'' own machines hit errors running commands or file operations.'
             next_step: 'Check NATS and relay health and the typed fault codes in Grafana.'
         - alert: OpenGeniMachineOpHealedFaultsSpiking
